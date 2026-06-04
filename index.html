@@ -6,39 +6,99 @@
   <title>Bangladesh Volunteer Map</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    body { margin:0; padding:0; font-family: Arial, sans-serif; }
+    body { margin:0; padding:0; font-family: 'Segoe UI', Arial, sans-serif; overflow: hidden; background: #f4f4f4; }
     #map { height: 100vh; width: 100%; }
     .sidebar {
-      position: absolute; top: 0; left: 0; width: 300px; height: 100vh;
-      background: white; box-shadow: 3px 0 10px rgba(0,0,0,0.3);
-      z-index: 1000; padding: 15px; overflow-y: auto;
+      position: absolute; top: 0; left: 0; width: 340px; height: 100vh;
+      background: white; box-shadow: 3px 0 12px rgba(0,0,0,0.25);
+      z-index: 1000; overflow-y: auto; padding: 20px; box-sizing: border-box;
     }
+    h1 { margin: 0 0 20px 0; font-size: 1.5em; color: #1e3a8a; }
+    .info-box { background: #f8fafc; padding: 12px; border-radius: 6px; margin-bottom: 15px; font-size: 0.95em; }
   </style>
 </head>
 <body>
   <div class="sidebar">
     <h1>Bangladesh Volunteers</h1>
-    <p><strong>Total Volunteers: 23</strong></p>
-    <p>Upload your data folder to make it fully working.</p>
+    <div class="info-box">
+      <strong>National Total:</strong> <span id="total-count">0</span> volunteers<br>
+      <small>Click any district to see details</small>
+    </div>
+    <input type="text" id="search" placeholder="Search district..." style="width:100%; padding:10px; margin-bottom:15px; border-radius:6px; border:1px solid #ccc;">
+    <div id="list"></div>
   </div>
 
-  <div style="margin-left: 300px;">
+  <div style="margin-left: 340px;">
     <div id="map"></div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+
   <script>
-    const map = L.map('map', {minZoom:7, maxZoom:13}).setView([23.685, 90.356], 7);
+    const map = L.map('map', { minZoom: 7, maxZoom: 13 }).setView([23.685, 90.356], 7);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
 
-    // Simple Bangladesh boundary (for testing)
-    const bdBounds = [[20.5, 88.0], [26.7, 92.7]];
-    map.fitBounds(bdBounds);
-    map.setMaxBounds(bdBounds);
+    let geoLayer, volunteerData = {}, allVolunteers = [];
 
-    L.marker([23.8103, 90.4125]).addTo(map).bindPopup("Dhaka - 8 Volunteers");
-    L.marker([22.3569, 91.7832]).addTo(map).bindPopup("Chittagong - 4 Volunteers");
+    function getColor(count) {
+      return count > 10 ? '#800026' :
+             count > 6  ? '#BD0026' :
+             count > 4  ? '#E31A1C' :
+             count > 2  ? '#FC4E2A' : '#FFEDA0';
+    }
+
+    async function loadData() {
+      // Load GeoJSON
+      const geo = await fetch('data/bd-districts.geojson').then(r => r.json());
+
+      // Load CSV
+      const csv = await fetch('data/volunteers.csv').then(r => r.text());
+      const parsed = Papa.parse(csv, {header: true}).data;
+
+      parsed.forEach(row => {
+        const dist = row.district.trim();
+        const names = row.names ? row.names.split(',').map(n => n.trim()) : [];
+        volunteerData[dist] = { count: parseInt(row.count) || names.length, names };
+        names.forEach(name => allVolunteers.push({district: dist, name}));
+      });
+
+      document.getElementById('total-count').textContent = allVolunteers.length;
+
+      // Render Map
+      geoLayer = L.geoJSON(geo, {
+        style: f => {
+          const name = f.properties.name || f.properties.NAME || '';
+          const count = volunteerData[name]?.count || 0;
+          return {
+            fillColor: getColor(count),
+            weight: 1.5,
+            color: 'white',
+            fillOpacity: 0.8
+          };
+        },
+        onEachFeature: (feature, layer) => {
+          const name = feature.properties.name || feature.properties.NAME || '';
+          const data = volunteerData[name] || {count:0, names:[]};
+
+          layer.bindPopup(`
+            <h3>${name}</h3>
+            <b>Total Volunteers: ${data.count}</b><br><br>
+            ${data.names.map(n => `• ${n}`).join('<br>') || 'No data'}
+          `);
+        }
+      }).addTo(map);
+
+      // Tight Bangladesh bounds
+      const bounds = geoLayer.getBounds();
+      map.fitBounds(bounds, {padding: [20,20]});
+      map.setMaxBounds(bounds);
+    }
+
+    loadData();
   </script>
 </body>
 </html>
