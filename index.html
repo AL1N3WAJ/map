@@ -6,14 +6,14 @@
   <title>Bangladesh Volunteer Map</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    body { margin:0; padding:0; font-family: Arial, sans-serif; overflow:hidden; }
+    body { margin:0; padding:0; font-family: Arial, sans-serif; overflow: hidden; }
     #map { height: 100vh; width: 100%; }
     .sidebar {
       position: absolute; top: 0; left: 0; width: 340px; height: 100vh;
       background: white; box-shadow: 3px 0 15px rgba(0,0,0,0.3);
       z-index: 1000; padding: 20px; overflow-y: auto;
     }
-    h1 { color: #1e40af; margin: 0 0 20px 0; }
+    h1 { color: #1e40af; margin-top: 0; }
   </style>
 </head>
 <body>
@@ -33,46 +33,47 @@
     const map = L.map('map').setView([23.685, 90.356], 7);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-    let totalVol = 0;
-
-    // Load GeoJSON + Volunteers
     Promise.all([
       fetch('data/bd-districts.geojson').then(r => r.json()),
       fetch('data/volunteers.csv').then(r => r.text())
     ]).then(([geo, csvText]) => {
-      const data = Papa.parse(csvText, {header: true}).data;
-      const volunteerData = {};
+      const parsed = Papa.parse(csvText, {header: true}).data;
+      const volData = {};
 
-      data.forEach(row => {
+      let total = 0;
+      parsed.forEach(row => {
         if (row.district) {
           const count = parseInt(row.count) || 0;
-          volunteerData[row.district.trim()] = count;
-          totalVol += count;
+          volData[row.district.trim()] = count;
+          total += count;
         }
       });
 
-      document.getElementById('total').textContent = totalVol;
+      document.getElementById('total').textContent = total;
 
       L.geoJSON(geo, {
         style: feature => {
-          const name = feature.properties.name || feature.properties.NAME || '';
-          const count = volunteerData[name] || 0;
+          const name = (feature.properties.name || feature.properties.NAME || '').trim();
+          const count = volData[name] || 0;
           return {
-            fillColor: count > 5 ? '#e11d48' : count > 2 ? '#f97316' : '#60a5fa',
+            fillColor: count > 6 ? '#e11d48' : count > 3 ? '#f97316' : '#3b82f6',
             weight: 1.5,
-            color: 'white',
+            color: '#fff',
             fillOpacity: 0.75
           };
         },
         onEachFeature: (feature, layer) => {
-          const name = feature.properties.name || feature.properties.NAME || '';
-          const count = volunteerData[name] || 0;
+          const name = (feature.properties.name || feature.properties.NAME || '').trim();
+          const count = volData[name] || 0;
           layer.bindPopup(`<b>${name}</b><br>Volunteers: ${count}`);
         }
       }).addTo(map);
 
-      map.fitBounds(L.geoJSON(geo).getBounds(), {padding: [30,30]});
+      map.fitBounds(L.geoJSON(geo).getBounds(), {padding: [40,40]});
       map.setMaxBounds(L.geoJSON(geo).getBounds());
+    }).catch(err => {
+      console.error(err);
+      alert("Data files not found. Please upload data folder correctly.");
     });
   </script>
 </body>
